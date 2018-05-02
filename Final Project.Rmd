@@ -20,6 +20,7 @@ library(dada2); packageVersion("dada2")
 library(ShortRead); packageVersion("ShortRead")
 library(phyloseq); packageVersion("phyloseq")
 library(ggplot2); packageVersion("ggplot2")
+library(DESeq2)
 ```
 
 ### Change the path to location of files.
@@ -39,7 +40,7 @@ list.files(path)
 
 Using the `dada2` pipeline, first read in the names of the .fastq files. Then manipulate those names as character variables, using regular expressions to create lists of the forward and reverse read .fastq files in *matched* order.
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 
 # Forward and reverse fastq filenames should have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
 
@@ -61,7 +62,7 @@ fnRS[1:3]
 
 ### Generate quality profiles of the reads
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 
 # Visualize the quality profile of the first two files containing forward reads
 
@@ -116,7 +117,7 @@ errR <- learnErrors(filtRs, multithread = TRUE)
 
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 
 # Visualize the estimated error rates by plotting the forward and reverse reads
 
@@ -128,7 +129,7 @@ plotErrors(errR, nominalQ = TRUE)
 
 ### Dereplication
 
-```{r, results="hide"}
+```{r message=FALSE, warning=FALSE, results="hide"}
 
 # Dereplicate
 
@@ -281,7 +282,7 @@ head(taxa.print)
 
 ### Construct a Phylogenetic Tree
 
-```{r, results="hide"}
+```{r message=FALSE, warning=FALSE, results="hide"}
 
 library(DECIPHER)
 seqs <- getSequences(seqtab2.nochim)
@@ -347,15 +348,14 @@ ps
 
 ### Diversity in Microbial Ecology
 
-```{r, results="hide"}
+```{r message=FALSE, warning=FALSE, results="hide"}
 
 # Plot alpha-diversity
 
-plot_richness(ps, x="Groups", measures = c("Shannon"))
-        theme_bw()
+plot_richness(ps, x="Groups", measures = c("Shannon"), color="Groups") + geom_boxplot()
         
-plot_richness(ps, x="Groups", measures = c("Chao1"))
-        theme_bw()
+        
+plot_richness(ps, x="Groups", measures = c("Chao1"), color="Groups") + geom_boxplot()
         
 ```
 
@@ -363,7 +363,7 @@ plot_richness(ps, x="Groups", measures = c("Chao1"))
 
 Using the Bray-Curtis dissimilarity index.
 
-```{r, results="hide"}
+```{r message=FALSE, warning=FALSE, results="hide"}
 
 # Ordinate with Bray-Curtis
 
@@ -400,35 +400,16 @@ plot_bar(ps.top10, fill="Family", facet_grid=~Groups)
 plot_bar(ps.top10, fill="Genus", facet_grid=~Groups)
 ```
 
+### Differential Abundance Testing
 ```{r}
-# Plot richness
+#Differential abundance testing
 
-plot_richness(ps, "Groups", "Sample_Type")
+#First remove samples with less than 500 reads (counts). Note that this kind of data cleanup is useful, necessary, and should be well-documented.
 
-```
-```{r}
-
-library(RColorBrewer)
-packageVersion("RColorBrewer")
-
-```
-
-```{r}
-
-# Why is filtering not working?
-
-psr <- transform_sample_counts(ps, function(x) x / sum(x))
-psfr <- filter_taxa(psr, function(x) mean(x) > 1e-5, TRUE)
-
+ps <- prune_samples(sample_sums(ps) > 500, ps)
 ps
 
-psr
-
-psfr
-```
-
-```{r}
-library(DESeq2)
+#Perform deseq2 analysis
 
 diagdds = phyloseq_to_deseq2(ps, ~ Groups)
 # calculate geometric means prior to estimate size factors
@@ -439,6 +420,7 @@ geoMeans = apply(counts(diagdds), 1, gm_mean)
 diagdds = estimateSizeFactors(diagdds, geoMeans = geoMeans)
 diagdds = DESeq(diagdds, fitType="local")
 
+#Investigate test results table
 
 res = results(diagdds)
 res = res[order(res$padj, na.last=NA), ]
@@ -450,26 +432,5 @@ head(sigtab)
 posigtab = sigtab[sigtab[, "log2FoldChange"] > 0, ]
 posigtab = posigtab[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
 
-library("ggplot2")
-theme_set(theme_bw())
-sigtabgen = subset(sigtab, !is.na(Genus))
-# Phylum order
-x = tapply(sigtabgen$log2FoldChange, sigtabgen$Phylum, function(x) max(x))
-x = sort(x, TRUE)
-sigtabgen$Phylum = factor(as.character(sigtabgen$Phylum), levels=names(x))
-# Genus order
-x = tapply(sigtabgen$log2FoldChange, sigtabgen$Genus, function(x) max(x))
-x = sort(x, TRUE)
-sigtabgen$Genus = factor(as.character(sigtabgen$Genus), levels=names(x))
-ggplot(sigtabgen, aes(y=Genus, x=log2FoldChange, color=Phylum)) + 
-  geom_vline(xintercept = 0.0, color = "gray", size = 0.5) +
-  geom_point(size=6) + 
-  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust=0.5))
 
-#try box and whiskers plot
-ggplot2.boxplot(data=)
 ```
-
-### References
-
-Callahan, B. J., Sankaran, K., Fukuyama, J. A., McMurdie, P. J., & Holmes, S. P. (2017). Bioconductor workflow for microbiome data analysis: From raw reads to community analyses. Retrieved from: https://bioconductor.org/help/course-materials/2017/BioC2017/Day1/Workshops/Microbiome/MicrobiomeWorkflowII.html#references
