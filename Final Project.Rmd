@@ -1,7 +1,7 @@
 ---
-title: "The Maternal Newborn Oral Microbiome"
+title: "16S rRNA Microbiome Data Analysis Workflow"
 author: "Irene Yang"
-date: "3/28/2018"
+date: "4/2/2018"
 output:
   html_document: default
   pdf_document: default
@@ -11,38 +11,6 @@ output:
 ```{r setup chunk 0, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
-Purpose: The purpose of this final project is to replicate analysis of 16SrRNA sequence data from a recently completed pilot study. The initial analysis was completed using the MOTHUR platform. I will attempt to replicate the analysis by using an R-based workflow modeled on the one presented in class which is based on the method introduced by Callahan and colleagues (2017)
-
-This milestone demonstrates that I have acquired and begun the exploration of my dataset. I am, at this point, on target with the timeline I set out in Milestone 1.
-
-Weekly Goal Task                                        Status
------------ ----                                        ------
-By 2/21     Install qiime2                              Using R-based workflow
-By 3/7      Demultiplexing and sequence quality control Complete
-By 3/14     FeatureTable and FeatureData summaries      Complete
-By 3/21     Diversity analyses                          Complete
-By 3/28     Milestone 2 Assignment
-By 4/7      Complete Taxonomic analysis
-By 4/14     Differential abundance testing 
-By 4/21     Trouble shoot analyses
-By 4/28     Manuscript and presentation prep
-By 5/2      Final Project due
-
-*A few notes:*
-
-1. The raw fastq files that support this project can be found within the secure Emory Box location at:  https://emory.app.box.com/folder/48209374654
-
-2. I did decide to change my workflow from a qiime2 platform to an R-based platform. This seemed logical since this was what we went over in class and because the advanced visualization with qiime2 requires use of R anyway.
-
-3. I do have a few questions about my results so far, which I will be working to address:
-  + Determine if merge paired reads are adequate
-  + Identify the reason for 0 bimeras.
-  
-4. I will complete my taxonomic analysis and attempt some basic differential abundance testing before the final due date.
-  
-
-## Step 1:  Processing fastq files to come up with OTU table.
 
 ### Load packages
 
@@ -54,16 +22,17 @@ library(phyloseq); packageVersion("phyloseq")
 library(ggplot2); packageVersion("ggplot2")
 ```
 
-### Change the path in the next chunk to where your files sit.
+### Change the path to location of files.
 
 ```{r}
 
-# Set the path to the sequence data files
+# Set path to the sequence data files
 
-path <- "~/Desktop/N741/2018Week7/AWHONN Fastq Files"
+path <- "~/Desktop/N741/2018Week7/Mom_Fastq"
+
 fileNames <- list.files(path)
 
-# Listing of filenames omitted to save space in rmarkdown
+list.files(path)
 ```
 
 ### Read in sample names
@@ -76,16 +45,21 @@ Using the `dada2` pipeline, first read in the names of the .fastq files. Then ma
 
 # Start by reading in the names of the .fastq files
 
-fnFs <- sort(list.files(path, pattern="_R1_001.fastq", full.names=TRUE))
-fnRs <- sort(list.files(path, pattern="_R2_001.fastq", full.names=TRUE))
+fnFs <- sort(list.files(path, pattern="_R1_001.fastq"))
+fnRs <- sort(list.files(path, pattern="_R2_001.fastq", full.names = "TRUE"))
 
 # Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
 
-sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+sample.names <- sapply(strsplit(fnFs, "_"), `[`, 1)
 
+# Specify the full path to the fnFs and fnRs
+fnFs <- file.path(path, fnFs)
+fnRS <- file.path(path, fnRs)
+fnFs[1:3]
+fnRS[1:3]
 ```
 
-### Generate Quality Profiles of the reads
+### Generate quality profiles of the reads
 
 ```{r}
 
@@ -93,11 +67,16 @@ sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
 
 plotQualityProfile(fnFs[1:2])
 
+```
+
+```{r}
+
 # Visualize the quality profile of the first two files containing reverse reads
 
 plotQualityProfile(fnRs[1:2])
 
 ```
+
 
 ### Filter and Trim
 
@@ -106,7 +85,7 @@ Typical filtering parameters were used:
 - `truncQ = 2` -- truncate reads at the first instance of a quality less than or equal to \code{truncQ}#.
 - `maxEE` = 2 -- sets the maximum number of expected errors allowed in a read, which is a better filter than simply averaging quality scores.
 
-Note: Decision made to trim conservatively given the robustness of dada2 to lower quality sequences. Trimmed at 200 (forward) and 190 (reverse).  Overlap between forward and reverse reads was ensured. 
+Note: Decision made to trim conservatively given the robustness of dada2 to lower quality sequences. Trimmed at 220 (forward) and 180 (reverse).  Overlap between forward and reverse reads was ensured. 
 
 ```{r}
 
@@ -121,12 +100,11 @@ filtRs <- file.path(filt.path, paste0(sample.names, "_R_file.fastq.gz"))
 
 # Filter the forward and reverse reads
 
-out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs, truncLen = c(200, 190),
-                     maxN=0, maxEE =c(2,2), truncQ = 2, rm.phix = TRUE,
-                     compress=TRUE, multithread=TRUE) 
+out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs, truncLen=c(220,180), maxN=0, maxEE=c(2,5), truncQ = 2, multithread=TRUE, compress=FALSE)
 
-head(out)
+list(out)
 
+##lenctruncation 
 ```
 
 ### Learn the Error Rates
@@ -154,8 +132,8 @@ plotErrors(errR, nominalQ = TRUE)
 
 # Dereplicate
 
-derepFs <- derepFastq(filtFs, verbose=FALSE)
-derepRs <- derepFastq(filtRs, verbose=FALSE)
+derepFs <- derepFastq(filtFs, verbose=TRUE)
+derepRs <- derepFastq(filtRs, verbose=TRUE)
 
 # Name the derep-class objects by the sample names
 
@@ -189,7 +167,7 @@ dadaRs[[1]]
 
 ```
 
-We can see that the algorithm has inferred 6 unique sequence variants from the forward reads and 8 from the reverse reads.
+We can see that the algorithm has inferred 99 unique sequence variants from the forward reads and 87 from the reverse reads.
 
 ### Merge Paired Reads
 
@@ -199,7 +177,7 @@ We can eliminate further spurious sequence variants by merging overlapping reads
 
 # Merge the denoised forward and reverse reads
 
-mergers <- mergePairs(dadaFs, derepFs, dadaRs, derepRs, verbose = FALSE )
+mergers <- mergePairs(dadaFs, derepFs, dadaRs, derepRs, verbose = TRUE )
 
 ```
 
@@ -232,17 +210,27 @@ table(nchar(getSequences(seqtab)))
 
 ```
 
+```{r}
+
+seqtab2 <- seqtab[,nchar(colnames(seqtab)) %in% seq(250, 256)]
+
+dim(seqtab2)
+class(seqtab2)
+table(nchar(getSequences(seqtab2)))
+
+```
+
 ### Remove Chimeras
 
 ```{r}
 
 # Remove chimeric sequences
 
-seqtab.nochim <- removeBimeraDenovo(seqtab, method = "consensus", multithread = TRUE, verbose=TRUE)
+seqtab2.nochim <- removeBimeraDenovo(seqtab2, method = "consensus", multithread = TRUE, verbose=TRUE)
 
-dim(seqtab.nochim)
+dim(seqtab2.nochim)
 
-sum(seqtab.nochim)/sum(seqtab)
+sum(seqtab2.nochim)/sum(seqtab2)
 
 ```
 
@@ -251,12 +239,14 @@ sum(seqtab.nochim)/sum(seqtab)
 ```{r}
 
 getN <- function(x) sum(getUniques(x))
-pctSurv <- rowSums(seqtab.nochim)*100/out[,1]
-track <- cbind(out, sapply(dadaFs, getN), sapply(mergers, getN), rowSums(seqtab), rowSums(seqtab.nochim), pctSurv)
+pctSurv <- rowSums(seqtab2.nochim)*100/out[,1]
+track <- cbind(out, sapply(dadaFs, getN), sapply(mergers, getN), rowSums(seqtab), rowSums(seqtab2.nochim), pctSurv)
 colnames(track) <- c("input", "filtered", "denoised", "merged", "tabled", "nonchimeric", "% passing")
 rownames(track) <- sample.names
 head(track)
 
+#Calculate average of nonchimeric reads per sample
+mean(track[,"nonchimeric"])
 ```
 
 ### Assign Taxonomy
@@ -275,7 +265,7 @@ path
 
 # list.files omitted to save space on rmarkdown
 
-taxa <- assignTaxonomy(seqtab.nochim, "~/Desktop/N741/2018Week7/AWHONN Fastq Files/gg_13_8_train_set_97.fa", multithread = TRUE)
+taxa <- assignTaxonomy(seqtab2.nochim, "~/Desktop/N741/2018Week7/Mom_Fastq/gg_13_8_train_set_97.fa", multithread = TRUE)
 unname(head(taxa))
 
 ```
@@ -294,7 +284,7 @@ head(taxa.print)
 ```{r, results="hide"}
 
 library(DECIPHER)
-seqs <- getSequences(seqtab.nochim)
+seqs <- getSequences(seqtab2.nochim)
 
 # This next command will allow propagation of sequence names to the tip labels of the tree
 names(seqs) <- seqs
@@ -326,13 +316,13 @@ Our next activity will be to hand off the data to the `phyloseq` package for ana
 
 # Import metadata file.
 
-samdf <- read.csv("~/Desktop/N741/2018Week7/Metadata.csv",header=TRUE)
+samdf <- read.csv("~/Desktop/N741/2018Week7/Mom_Metadata.csv",header=TRUE)
 
 rownames(samdf) <- samdf$Sample_ID
 
 rownames(samdf)
 
-rownames(seqtab.nochim)
+rownames(seqtab2.nochim)
 
 ```
 
@@ -344,7 +334,7 @@ library(phyloseq)
 
 # Create phyloseq object
 
-ps <- phyloseq(otu_table(seqtab.nochim, taxa_are_rows=FALSE), 
+ps <- phyloseq(otu_table(seqtab2.nochim, taxa_are_rows=FALSE), 
                sample_data(samdf),
                tax_table(taxa),
                phy_tree(fitGTR$tree))
@@ -362,6 +352,9 @@ ps
 # Plot alpha-diversity
 
 plot_richness(ps, x="Groups", measures = c("Shannon"))
+        theme_bw()
+        
+plot_richness(ps, x="Groups", measures = c("Chao1"))
         theme_bw()
         
 ```
@@ -389,13 +382,22 @@ We see that ordination picks out a separation between maternal and newborn sampl
 ### Bar Plots   
 
 ```{r}
-# Create bar plots for top 20 OTUs
 
-top20 <- names(sort(taxa_sums(ps), decreasing = TRUE))[1:20]
-ps.top20 <- transform_sample_counts(ps, function(OTU) OTU/sum(OTU))
-ps.top20 <- prune_taxa(top20, ps.top20)
-plot_bar(ps.top20, x="Groups", fill="Phylum")
+# Create bar plots for top 10 OTUs
 
+top10 <- names(sort(taxa_sums(ps), decreasing = TRUE))[1:10]
+ps.top10 <- transform_sample_counts(ps, function(OTU) OTU/sum(OTU))
+ps.top10 <- prune_taxa(top10, ps.top10)
+
+plot_bar(ps.top10, fill="Phylum", facet_grid=~Groups)
+
+plot_bar(ps.top10, fill="Class", facet_grid=~Groups)
+
+plot_bar(ps.top10, fill="Order", facet_grid=~Groups)
+
+plot_bar(ps.top10, fill="Family", facet_grid=~Groups)
+
+plot_bar(ps.top10, fill="Genus", facet_grid=~Groups)
 ```
 
 ```{r}
@@ -403,6 +405,69 @@ plot_bar(ps.top20, x="Groups", fill="Phylum")
 
 plot_richness(ps, "Groups", "Sample_Type")
 
+```
+```{r}
+
+library(RColorBrewer)
+packageVersion("RColorBrewer")
+
+```
+
+```{r}
+
+# Why is filtering not working?
+
+psr <- transform_sample_counts(ps, function(x) x / sum(x))
+psfr <- filter_taxa(psr, function(x) mean(x) > 1e-5, TRUE)
+
+ps
+
+psr
+
+psfr
+```
+
+```{r}
+library(DESeq2)
+
+diagdds = phyloseq_to_deseq2(ps, ~ Groups)
+# calculate geometric means prior to estimate size factors
+gm_mean = function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+geoMeans = apply(counts(diagdds), 1, gm_mean)
+diagdds = estimateSizeFactors(diagdds, geoMeans = geoMeans)
+diagdds = DESeq(diagdds, fitType="local")
+
+
+res = results(diagdds)
+res = res[order(res$padj, na.last=NA), ]
+alpha = 0.01
+sigtab = res[(res$padj < alpha), ]
+sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+head(sigtab)
+
+posigtab = sigtab[sigtab[, "log2FoldChange"] > 0, ]
+posigtab = posigtab[, c("baseMean", "log2FoldChange", "lfcSE", "padj", "Phylum", "Class", "Family", "Genus")]
+
+library("ggplot2")
+theme_set(theme_bw())
+sigtabgen = subset(sigtab, !is.na(Genus))
+# Phylum order
+x = tapply(sigtabgen$log2FoldChange, sigtabgen$Phylum, function(x) max(x))
+x = sort(x, TRUE)
+sigtabgen$Phylum = factor(as.character(sigtabgen$Phylum), levels=names(x))
+# Genus order
+x = tapply(sigtabgen$log2FoldChange, sigtabgen$Genus, function(x) max(x))
+x = sort(x, TRUE)
+sigtabgen$Genus = factor(as.character(sigtabgen$Genus), levels=names(x))
+ggplot(sigtabgen, aes(y=Genus, x=log2FoldChange, color=Phylum)) + 
+  geom_vline(xintercept = 0.0, color = "gray", size = 0.5) +
+  geom_point(size=6) + 
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust=0.5))
+
+#try box and whiskers plot
+ggplot2.boxplot(data=)
 ```
 
 ### References
